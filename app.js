@@ -2,6 +2,7 @@
 // Pipe Yard Relocation Optimizer — app.js
 // ============================================================
 
+
 // ============================================================
 // SECTION 1: SEEDED PRNG
 // ============================================================
@@ -64,7 +65,6 @@ function generatePipes(seed, totalPipes) {
     });
   }
 
-  // Shuffle pickupOrder so it's not correlated with id.
   for (let i = pipes.length - 1; i > 0; i--) {
     const j = randomInt(rng, 0, i);
     const a = pipes[i].pickupOrder;
@@ -154,13 +154,16 @@ function shuffleOnce(stacks, rules, rng) {
   if (si.length === 0 || sj.length === 0) return;
   const pi = si[si.length - 1];
   const pj = sj[sj.length - 1];
-  si.pop(); sj.pop();
+  si.pop();
+  sj.pop();
   const ok1 = canPlace(sj, pi, rules);
   const ok2 = canPlace(si, pj, rules);
   if (ok1 && ok2) {
-    si.push(pj); sj.push(pi);
+    si.push(pj);
+    sj.push(pi);
   } else {
-    si.push(pi); sj.push(pj);
+    si.push(pi);
+    sj.push(pj);
   }
 }
 
@@ -898,25 +901,6 @@ function applyTheme(theme) {
   localStorage.setItem("theme", theme);
 }
 
-function initI18nAndTheme() {
-  const savedLang = localStorage.getItem("lang") || "en";
-  const savedTheme = localStorage.getItem("theme") || "dark";
-
-  applyLanguage(savedLang);
-  applyTheme(savedTheme);
-
-  document.getElementById("langToggle").addEventListener("click", () => {
-    applyLanguage(currentLang === "en" ? "ar" : "en");
-  });
-
-  document.getElementById("themeToggle").addEventListener("click", () => {
-    const cur = document.documentElement.getAttribute("data-theme") || "dark";
-    applyTheme(cur === "dark" ? "light" : "dark");
-  });
-
-  initDemo();
-}
-
 console.log("✅ i18n & theme loaded");
 
 
@@ -960,6 +944,8 @@ function renderYard(container, state, options) {
     const x = padding + i * (pipeW + gapX);
     const baseY = padding + H * (pipeH + gapY);
 
+    svg += `<g data-stack-idx="${i}" style="cursor: pointer;">`;
+    svg += `<rect x="${x}" y="${padding}" width="${pipeW}" height="${baseY - padding + 20}" fill="transparent" />`;
     svg += `<line x1="${x}" y1="${baseY}" x2="${x + pipeW}" y2="${baseY}" stroke="var(--border)" stroke-width="2" />`;
     svg += `<text x="${x + pipeW / 2}" y="${baseY + 18}" text-anchor="middle" fill="var(--text-muted)" font-size="11">S${i}</text>`;
 
@@ -974,6 +960,7 @@ function renderYard(container, state, options) {
       svg += `<rect x="${x}" y="${y}" width="${pipeW}" height="${pipeH}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}" />`;
       svg += `<text x="${x + pipeW / 2}" y="${y + pipeH / 2 + 4}" text-anchor="middle" fill="white" font-size="13" font-weight="600">${pipe.pickupOrder}</text>`;
     }
+    svg += `</g>`;
   }
 
   svg += `</svg>`;
@@ -1001,25 +988,215 @@ function renderLegend(container) {
   container.innerHTML = html;
 }
 
-function initDemo() {
-  const container = document.getElementById("yardContainer");
-  const legendContainer = document.getElementById("yardLegend");
-  if (!container) return;
+console.log("✅ Yard visualization loaded");
 
+
+// ============================================================
+// SECTION 15: MANUAL MODE
+// ============================================================
+
+let demoState = {
+  scenario: null,
+  currentState: null,
+  selectedStack: null,
+  relocations: 0
+};
+
+function initManualMode() {
   const scenario = createDefaultScenario(42);
-  const state = initialState(scenario);
-  const retrieved = autoRetrieve(state);
+  demoState.scenario = scenario;
+  demoState.currentState = initialState(scenario);
+  demoState.selectedStack = null;
+  demoState.relocations = 0;
 
-  renderYard(container, retrieved, { H: scenario.H });
-  renderLegend(legendContainer);
+  demoState.currentState = autoRetrieve(demoState.currentState);
+
+  const container = document.getElementById("yardContainer");
+  if (container && !container.dataset.manualBound) {
+    container.dataset.manualBound = "1";
+    container.addEventListener("click", (e) => {
+      const stackEl = e.target.closest("[data-stack-idx]");
+      if (!stackEl) return;
+      const idx = parseInt(stackEl.getAttribute("data-stack-idx"), 10);
+      handleStackClick(idx);
+    });
+  }
+
+  const bind = (id, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", handler);
+  };
+
+  bind("btnReset", resetDemo);
+  bind("btnNewScenario", newScenario);
+  bind("btnSolveNaive", () => autoSolve("naive"));
+  bind("btnSolveHeuristic", () => autoSolve("heuristic"));
+  bind("btnSolveOptimal", () => autoSolve("optimal"));
+
+  renderCurrentState();
+  renderLegend(document.getElementById("yardLegend"));
 }
 
-console.log("✅ Yard visualization loaded");
+function renderCurrentState() {
+  const container = document.getElementById("yardContainer");
+  renderYard(container, demoState.currentState, { H: demoState.scenario.H });
+  updateStatus();
+  const countEl = document.getElementById("relocationCount");
+  if (countEl) countEl.textContent = demoState.relocations;
+}
+
+function updateStatus() {
+  const statusEl = document.getElementById("yardStatus");
+  if (!statusEl) return;
+
+  if (isSolved(demoState.currentState)) {
+    statusEl.textContent = "🎉 Solved! All pipes retrieved.";
+    statusEl.className = "yard-status success";
+    return;
+  }
+
+  if (demoState.selectedStack !== null) {
+    statusEl.textContent = `Selected stack S${demoState.selectedStack} (top pipe: #${getTopPickupOrder(demoState.selectedStack)}). Click another stack to place it.`;
+    statusEl.className = "yard-status";
+  } else {
+    statusEl.textContent = `Next needed: pipe #${demoState.currentState.nextNeeded}. Click a stack to pick up its top pipe.`;
+    statusEl.className = "yard-status";
+  }
+}
+
+function getTopPickupOrder(stackIdx) {
+  const stack = demoState.currentState.stacks[stackIdx];
+  if (!stack || stack.length === 0) return "—";
+  return stack[stack.length - 1].pickupOrder;
+}
+
+function handleStackClick(idx) {
+  const state = demoState.currentState;
+  const stack = state.stacks[idx];
+
+  if (demoState.selectedStack === null) {
+    if (stack.length === 0) {
+      showError("Stack S" + idx + " is empty. Nothing to pick up.");
+      return;
+    }
+    demoState.selectedStack = idx;
+    updateStatus();
+    return;
+  }
+
+  if (demoState.selectedStack === idx) {
+    demoState.selectedStack = null;
+    updateStatus();
+    return;
+  }
+
+  const fromIdx = demoState.selectedStack;
+  const toIdx = idx;
+  const newState = applyMove(state, fromIdx, toIdx, demoState.scenario.rules);
+
+  if (!newState) {
+    showError(`Illegal move: cannot place pipe on stack S${toIdx}.`);
+    return;
+  }
+
+  demoState.currentState = autoRetrieve(newState);
+  demoState.relocations++;
+  demoState.selectedStack = null;
+
+  renderCurrentState();
+}
+
+function showError(msg) {
+  const statusEl = document.getElementById("yardStatus");
+  if (statusEl) {
+    statusEl.textContent = "❌ " + msg;
+    statusEl.className = "yard-status error";
+  }
+  demoState.selectedStack = null;
+}
+
+function resetDemo() {
+  demoState.currentState = autoRetrieve(initialState(demoState.scenario));
+  demoState.selectedStack = null;
+  demoState.relocations = 0;
+  renderCurrentState();
+}
+
+function newScenario() {
+  const newSeed = Math.floor(Math.random() * 100000);
+  const scenario = createDefaultScenario(newSeed);
+  if (!scenario) {
+    showError("Could not generate scenario. Try again.");
+    return;
+  }
+  demoState.scenario = scenario;
+  demoState.currentState = autoRetrieve(initialState(scenario));
+  demoState.selectedStack = null;
+  demoState.relocations = 0;
+  renderCurrentState();
+}
+
+function autoSolve(method) {
+  const scenario = demoState.scenario;
+  let result;
+  if (method === "naive") result = solveNaive(scenario);
+  else if (method === "heuristic") result = solveHeuristic(scenario);
+  else result = solveOptimal(scenario);
+
+  if (result.status !== "solved") {
+    showError(`Solver returned: ${result.status}`);
+    return;
+  }
+
+  let state = autoRetrieve(initialState(scenario));
+  for (const m of result.moves) {
+    state = applyMove(state, m.from, m.to, scenario.rules);
+    state = autoRetrieve(state);
+  }
+
+  demoState.currentState = state;
+  demoState.relocations = result.relocations;
+  demoState.selectedStack = null;
+  renderCurrentState();
+
+  const statusEl = document.getElementById("yardStatus");
+  if (statusEl) {
+    statusEl.textContent = `✅ ${method} solved with ${result.relocations} relocations.`;
+    statusEl.className = "yard-status success";
+  }
+}
+
+console.log("✅ Manual mode loaded");
 
 
 // ============================================================
 // INIT
 // ============================================================
+
+function initI18nAndTheme() {
+  const savedLang = localStorage.getItem("lang") || "en";
+  const savedTheme = localStorage.getItem("theme") || "dark";
+
+  applyLanguage(savedLang);
+  applyTheme(savedTheme);
+
+  const langToggle = document.getElementById("langToggle");
+  if (langToggle) {
+    langToggle.addEventListener("click", () => {
+      applyLanguage(currentLang === "en" ? "ar" : "en");
+    });
+  }
+
+  const themeToggle = document.getElementById("themeToggle");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const cur = document.documentElement.getAttribute("data-theme") || "dark";
+      applyTheme(cur === "dark" ? "light" : "dark");
+    });
+  }
+
+  initManualMode();
+}
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initI18nAndTheme);

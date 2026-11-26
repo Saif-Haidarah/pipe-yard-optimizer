@@ -44,7 +44,25 @@
       <div class="card">
         <h2 data-i18n="demoTitle">Interactive Demo</h2>
         <p data-i18n="demoDesc">A generated scenario (seed 42). Pipes are colored by diameter; the gold-outlined pipe is the next needed.</p>
-        <div class="yard-container" id="yardContainer" style="margin-top: var(--space-4);"></div>
+        <div class="demo-controls" style="margin-bottom: var(--space-4);">
+  <div class="control-group">
+    <button id="btnReset" class="btn btn-secondary">Reset</button>
+    <button id="btnNewScenario" class="btn btn-secondary">New Scenario</button>
+  </div>
+  <div class="control-group">
+    <button id="btnSolveNaive" class="btn btn-secondary">Naive</button>
+    <button id="btnSolveHeuristic" class="btn btn-secondary">Heuristic</button>
+    <button id="btnSolveOptimal" class="btn btn-secondary">Optimal</button>
+  </div>
+  <div class="control-group">
+    <span class="status-pill">
+      <span id="relocationCount">0</span> relocations
+    </span>
+  </div>
+</div>
+<div class="yard-container" id="yardContainer" style="margin-top: var(--space-4);"></div>
+<div id="yardStatus" class="yard-status" style="margin-top: var(--space-3);"></div>
+<div id="yardLegend" style="margin-top: var(--space-4);"></div>
         <div id="yardLegend" style="margin-top: var(--space-4);"></div>
       </div>
     </section>

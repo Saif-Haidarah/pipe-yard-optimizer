@@ -434,3 +434,56 @@ button {
     width: 100%;
   }
 }
+/* ---------- Demo controls ---------- */
+.demo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.control-group {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.status-pill span {
+  color: var(--accent);
+  margin-right: var(--space-1);
+}
+
+.yard-status {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+
+.yard-status.success {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.yard-status.error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
