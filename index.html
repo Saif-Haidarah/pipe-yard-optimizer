@@ -3,23 +3,74 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Reduce unnecessary relocations in oilfield tubulars laydown yards. A decision-support tool with naive, heuristic, and optimal solvers.">
   <title>Pipe Yard Relocation Optimizer</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>Pipe Yard Relocation Optimizer</h1>
-    <button id="langToggle">العربية</button>
+  <a href="#main" class="skip-link" data-i18n="skipToContent">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="logo">Pipe Yard Optimizer</div>
+      <div class="header-controls">
+        <button id="themeToggle" class="icon-btn" aria-label="Toggle theme" data-i18n-aria="toggleTheme">
+          <span id="themeIcon">🌙</span>
+        </button>
+        <button id="langToggle" class="lang-btn" aria-label="Switch language" data-i18n-aria="switchLang">
+          العربية
+        </button>
+      </div>
+    </div>
   </header>
-  <main>
-    <section id="hero">Hero — headline metric goes here</section>
-    <section id="demo">Interactive demo</section>
-    <section id="benchmark">Benchmark</section>
-    <section id="caseStudy">Case study</section>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero container">
+      <h1 data-i18n="heroTitle">Pipe Yard Relocation Optimizer</h1>
+      <p class="lead" data-i18n="heroLead">
+        Reduce unnecessary relocations in oilfield tubulars laydown yards.
+        Compare naive, heuristic, and optimal solvers on real scenarios.
+      </p>
+      <div class="metric-card">
+        <div class="metric-label" data-i18n="metricLabel">Headline Metric</div>
+        <div class="metric-value" id="heroMetric" data-i18n="metricPending">—</div>
+        <div class="metric-sub" data-i18n="metricSub">Run the benchmark to see results</div>
+      </div>
+    </section>
+
+    <!-- Placeholder sections (to be filled in later sessions) -->
+    <section class="section container" id="demo">
+      <div class="card">
+        <h2 data-i18n="demoTitle">Interactive Demo</h2>
+        <p data-i18n="demoPlaceholder">Coming soon: yard visualization, manual mode, and solver comparison.</p>
+      </div>
+    </section>
+
+    <section class="section container" id="benchmark">
+      <div class="card">
+        <h2 data-i18n="benchmarkTitle">Benchmark</h2>
+        <p data-i18n="benchmarkPlaceholder">Coming soon: run 1000 scenarios, compare solvers, and view results.</p>
+      </div>
+    </section>
+
+    <section class="section container" id="caseStudy">
+      <div class="card">
+        <h2 data-i18n="caseStudyTitle">Case Study</h2>
+        <p data-i18n="caseStudyPlaceholder">Coming soon: problem, approach, results, and limitations.</p>
+      </div>
+    </section>
   </main>
-  <footer>
-    <a href="#">GitHub</a> — Built by Saif
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>
+        <a href="#" data-i18n="footerGithub">GitHub</a>
+        — <span data-i18n="footerBuilt">Built by Saif</span>
+      </p>
+    </div>
   </footer>
+
   <script src="app.js"></script>
 </body>
 </html>

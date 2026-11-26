@@ -1094,3 +1094,124 @@ function renderBarChart(container, data, options) {
 }
 
 console.log("✅ SVG bar chart loaded");
+
+// ============================================================
+// SECTION 13: I18N & THEME
+// ============================================================
+// All strings in one place. Switch language without reload.
+// Theme (dark/light) saved to localStorage.
+
+const I18N = {
+  en: {
+    skipToContent: "Skip to content",
+    toggleTheme: "Toggle theme",
+    switchLang: "Switch language",
+    heroTitle: "Pipe Yard Relocation Optimizer",
+    heroLead: "Reduce unnecessary relocations in oilfield tubulars laydown yards. Compare naive, heuristic, and optimal solvers on real scenarios.",
+    metricLabel: "Headline Metric",
+    metricPending: "—",
+    metricSub: "Run the benchmark to see results",
+    demoTitle: "Interactive Demo",
+    demoPlaceholder: "Coming soon: yard visualization, manual mode, and solver comparison.",
+    benchmarkTitle: "Benchmark",
+    benchmarkPlaceholder: "Coming soon: run 1000 scenarios, compare solvers, and view results.",
+    caseStudyTitle: "Case Study",
+    caseStudyPlaceholder: "Coming soon: problem, approach, results, and limitations.",
+    footerGithub: "GitHub",
+    footerBuilt: "Built by Saif"
+  },
+  ar: {
+    skipToContent: "تجاوز إلى المحتوى",
+    toggleTheme: "تبديل المظهر",
+    switchLang: "تبديل اللغة",
+    heroTitle: "محسّن نقل الأنابيب",
+    heroLead: "قلّل عمليات النقل غير الضرورية في ساحات الأنابيب النفطية. قارن بين الحلول الساذجة والاستدلالية والمثلى على سيناريوهات حقيقية.",
+    metricLabel: "المؤشر الرئيسي",
+    metricPending: "—",
+    metricSub: "شغّل القياس لرؤية النتائج",
+    demoTitle: "العرض التفاعلي",
+    demoPlaceholder: "قريباً: عرض الساحة، الوضع اليدوي، ومقارنة الحلول.",
+    benchmarkTitle: "القياس",
+    benchmarkPlaceholder: "قريباً: تشغيل 1000 سيناريو، مقارنة الحلول، وعرض النتائج.",
+    caseStudyTitle: "دراسة الحالة",
+    caseStudyPlaceholder: "قريباً: المشكلة، المنهج، النتائج، والقيود.",
+    footerGithub: "GitHub",
+    footerBuilt: "صنع بواسطة سيف"
+  }
+};
+
+let currentLang = "en";
+
+function applyLanguage(lang) {
+  currentLang = lang;
+  const dict = I18N[lang];
+  if (!dict) return;
+
+  // Update <html> attributes.
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+  // Update text content.
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key]) el.textContent = dict[key];
+  });
+
+  // Update aria-labels.
+  document.querySelectorAll("[data-i18n-aria]").forEach(el => {
+    const key = el.getAttribute("data-i18n-aria");
+    if (dict[key]) el.setAttribute("aria-label", dict[key]);
+  });
+
+  // Update toggle button label.
+  const toggle = document.getElementById("langToggle");
+  if (toggle) toggle.textContent = lang === "en" ? "العربية" : "English";
+
+  // Save preference.
+  localStorage.setItem("lang", lang);
+}
+
+// ---------- Theme ----------
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const icon = document.getElementById("themeIcon");
+  if (icon) icon.textContent = theme === "dark" ? "🌙" : "☀️";
+  localStorage.setItem("theme", theme);
+}
+
+// ---------- Init ----------
+
+function initI18nAndTheme() {
+  // Load saved preferences (or defaults).
+  const savedLang = localStorage.getItem("lang") || "en";
+  const savedTheme = localStorage.getItem("theme") || "dark";
+
+  applyLanguage(savedLang);
+  applyTheme(savedTheme);
+
+  // Wire up buttons.
+  const langToggle = document.getElementById("langToggle");
+  if (langToggle) {
+    langToggle.addEventListener("click", () => {
+      applyLanguage(currentLang === "en" ? "ar" : "en");
+    });
+  }
+
+  const themeToggle = document.getElementById("themeToggle");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") || "dark";
+      applyTheme(current === "dark" ? "light" : "dark");
+    });
+  }
+}
+
+// Run on page load.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initI18nAndTheme);
+} else {
+  initI18nAndTheme();
+}
+
+console.log("✅ i18n & theme loaded");
