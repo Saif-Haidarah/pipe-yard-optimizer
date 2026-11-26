@@ -231,3 +231,4 @@ const strictOk = scStrict.stacks.every(s => {
   return true;
 });
 console.log("strict diameter respected:", strictOk);    // true
+
