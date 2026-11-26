@@ -664,3 +664,123 @@ function isOptimalEligible(scenario) {
 }
 
 console.log("✅ Optimal solver loaded (fixed)");
+
+// ============================================================
+// SECTION 9: BENCHMARK (Main — 1000 scenarios)
+// ============================================================
+// Runs the main benchmark asynchronously in chunks to avoid
+// freezing the UI. Uses setTimeout between chunks.
+//
+// Returns a Promise resolving to:
+// {
+//   total: number of scenarios attempted,
+//   solved: number that returned "solved",
+//   rejected: number that returned null or "infeasible",
+//   naive: { avg, median, min, max, total },
+//   heuristic: { avg, median, min, max, total },
+//   reductionPct: (naive.avg - heuristic.avg) / naive.avg * 100,
+//   heuristicWorse: [ { seed, naive, heuristic } ... ],
+//   progress: { done, total }
+// }
+
+function runBenchmarkMain(options) {
+  const opts = options || {};
+  const count = opts.count || 1000;
+  const chunkSize = opts.chunkSize || 50;
+  const onProgress = opts.onProgress || function () {};
+
+  return new Promise((resolve) => {
+    const naiveResults = [];
+    const heuristicResults = [];
+    const heuristicWorse = [];
+    let rejected = 0;
+    let i = 0;
+
+    function processChunk() {
+      const chunkEnd = Math.min(i + chunkSize, count);
+
+      for (; i < chunkEnd; i++) {
+        const seed = i;  // deterministic seed per scenario
+        const scenario = createDefaultScenario(seed);
+
+        if (!scenario) {
+          rejected++;
+          continue;
+        }
+
+        const naive = solveNaive(scenario);
+        const heur = solveHeuristic(scenario);
+
+        if (naive.status !== "solved" || heur.status !== "solved") {
+          rejected++;
+          continue;
+        }
+
+        naiveResults.push(naive.relocations);
+        heuristicResults.push(heur.relocations);
+
+        if (heur.relocations > naive.relocations) {
+          heuristicWorse.push({
+            seed: seed,
+            naive: naive.relocations,
+            heuristic: heur.relocations
+          });
+        }
+      }
+
+      // Report progress.
+      onProgress(i, count);
+
+      if (i < count) {
+        // Yield to the browser, then continue.
+        setTimeout(processChunk, 0);
+      } else {
+        // Done — compute stats.
+        resolve({
+          total: count,
+          solved: naiveResults.length,
+          rejected: rejected,
+          naive: summarize(naiveResults),
+          heuristic: summarize(heuristicResults),
+          reductionPct: computeReduction(naiveResults, heuristicResults),
+          heuristicWorse: heuristicWorse
+        });
+      }
+    }
+
+    processChunk();
+  });
+}
+
+// Compute summary stats for an array of numbers.
+function summarize(arr) {
+  if (arr.length === 0) {
+    return { avg: 0, median: 0, min: 0, max: 0, total: 0 };
+  }
+
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const total = arr.reduce((s, x) => s + x, 0);
+  const avg = total / arr.length;
+  const median = arr.length % 2 === 1
+    ? sorted[Math.floor(arr.length / 2)]
+    : (sorted[arr.length / 2 - 1] + sorted[arr.length / 2]) / 2;
+
+  return {
+    avg: avg,
+    median: median,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    total: total
+  };
+}
+
+// Compute % reduction from naive to heuristic.
+function computeReduction(naiveArr, heurArr) {
+  if (naiveArr.length === 0) return 0;
+  const naiveAvg = naiveArr.reduce((s, x) => s + x, 0) / naiveArr.length;
+  const heurAvg = heurArr.reduce((s, x) => s + x, 0) / heurArr.length;
+  if (naiveAvg === 0) return 0;
+  return ((naiveAvg - heurAvg) / naiveAvg) * 100;
+}
+
+console.log("✅ Benchmark (main) loaded");
