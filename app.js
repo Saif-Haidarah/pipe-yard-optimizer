@@ -891,3 +891,146 @@ function runBenchmarkSmall(options) {
 }
 
 console.log("✅ Benchmark (small) loaded");
+
+// ============================================================
+// SECTION 11: SELF-CHECK
+// ============================================================
+// Run from the console with: runSelfCheck()
+// Verifies:
+//   (1) No solver produces an illegal move (replay every move list).
+//   (2) On every small scenario where Optimal returned "solved",
+//       Optimal <= Heuristic and Optimal <= Naive (assert).
+//   (3) REPORT (without asserting) how often Heuristic > Naive.
+// Prints a clear PASS/FAIL summary.
+
+function runSelfCheck(options) {
+  const opts = options || {};
+  const count = opts.count || 100;
+
+  console.log("=== runSelfCheck() starting ===");
+  console.log(`Testing ${count} small scenarios (N=4, H=3, shuffle=10)...\n`);
+
+  let pass = true;
+  const failures = [];
+
+  // Counters for report.
+  let heurWorseThanNaive = 0;
+  let optWorseThanHeur = 0;
+  let optWorseThanNaive = 0;
+  let illegalMoveCount = 0;
+  let solvedCount = 0;
+
+  for (let seed = 0; seed < count; seed++) {
+    const scenario = createScenario(seed, 4, 3, false, { shuffleSteps: 10 });
+    if (!scenario) continue;
+
+    const naive = solveNaive(scenario);
+    const heur = solveHeuristic(scenario);
+    const opt = solveOptimal(scenario);
+
+    // (1) Verify every solver's move list is legal.
+    const solvers = [
+      { name: "naive", result: naive },
+      { name: "heuristic", result: heur },
+      { name: "optimal", result: opt }
+    ];
+
+    for (const { name, result } of solvers) {
+      if (result.status !== "solved") continue;
+      const replay = replayAndVerify(scenario, result.moves);
+      if (!replay.ok) {
+        pass = false;
+        illegalMoveCount++;
+        failures.push({
+          seed: seed,
+          solver: name,
+          error: replay.error,
+          move: replay.failingMove
+        });
+      }
+    }
+
+    // (2) Assert Optimal <= Heuristic and Optimal <= Naive.
+    if (opt.status === "solved") {
+      solvedCount++;
+
+      if (heur.status === "solved" && opt.relocations > heur.relocations) {
+        pass = false;
+        optWorseThanHeur++;
+        failures.push({
+          seed: seed,
+          error: `Optimal (${opt.relocations}) > Heuristic (${heur.relocations})`
+        });
+      }
+
+      if (naive.status === "solved" && opt.relocations > naive.relocations) {
+        pass = false;
+        optWorseThanNaive++;
+        failures.push({
+          seed: seed,
+          error: `Optimal (${opt.relocations}) > Naive (${naive.relocations})`
+        });
+      }
+    }
+
+    // (3) Report heuristic > naive (do NOT assert).
+    if (heur.status === "solved" && naive.status === "solved" && heur.relocations > naive.relocations) {
+      heurWorseThanNaive++;
+    }
+  }
+
+  // Print summary.
+  console.log("=== Self-Check Results ===");
+  console.log(`Scenarios tested:       ${count}`);
+  console.log(`Optimal solved:         ${solvedCount}`);
+  console.log(`Illegal moves found:    ${illegalMoveCount}`);
+  console.log(`Optimal > Heuristic:    ${optWorseThanHeur} (must be 0)`);
+  console.log(`Optimal > Naive:        ${optWorseThanNaive} (must be 0)`);
+  console.log(`Heuristic > Naive:      ${heurWorseThanNaive} (report only, not a failure)`);
+  console.log("");
+
+  if (pass) {
+    console.log("✅ SELF-CHECK PASSED");
+  } else {
+    console.log("❌ SELF-CHECK FAILED");
+    console.log("Failures:");
+    failures.slice(0, 10).forEach(f => console.log("  ", f));
+    if (failures.length > 10) {
+      console.log(`  ... and ${failures.length - 10} more`);
+    }
+  }
+
+  return { pass, failures, stats: { heurWorseThanNaive, optWorseThanHeur, optWorseThanNaive, illegalMoveCount } };
+}
+
+// Replay a move list through the model, verifying every move is legal.
+// Returns { ok: true } or { ok: false, error, failingMove }.
+function replayAndVerify(scenario, moves) {
+  // IMPORTANT: start with initial autoRetrieve, matching what solvers do.
+  let state = autoRetrieve(initialState(scenario));
+
+  for (let i = 0; i < moves.length; i++) {
+    const m = moves[i];
+    const nextState = applyMove(state, m.from, m.to, scenario.rules);
+    if (!nextState) {
+      return {
+        ok: false,
+        error: `Move #${i + 1} is illegal`,
+        failingMove: m
+      };
+    }
+    state = autoRetrieve(nextState);
+  }
+
+  if (!isSolved(state)) {
+    return {
+      ok: false,
+      error: "Scenario not solved after replaying all moves",
+      failingMove: null
+    };
+  }
+
+  return { ok: true };
+}
+
+console.log("✅ Self-check loaded");
