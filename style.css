@@ -487,3 +487,114 @@ button {
   color: var(--danger);
   border-color: var(--danger);
 }
+/* ---------- Replay ---------- */
+.replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.replay-speed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.replay-speed input[type="range"] {
+  width: 100px;
+  accent-color: var(--accent);
+}
+
+.replay-progress {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.replay-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .replay-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.replay-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition);
+}
+
+.replay-panel.solved {
+  border-color: var(--success);
+}
+
+.replay-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.replay-panel-title {
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+
+[data-solver="naive"] .replay-panel-title {
+  color: var(--danger);
+}
+
+[data-solver="heuristic"] .replay-panel-title {
+  color: var(--warning);
+}
+
+[data-solver="optimal"] .replay-panel-title {
+  color: var(--success);
+}
+
+.replay-panel-count {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.replay-panel-count span:first-child {
+  color: var(--accent);
+}
+
+.replay-panel .yard-container {
+  padding: var(--space-2);
+  min-height: 200px;
+}
+
+.replay-panel-status {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  padding: var(--space-2);
+  text-align: center;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+.replay-panel-status.won {
+  color: var(--success);
+  font-weight: 700;
+}

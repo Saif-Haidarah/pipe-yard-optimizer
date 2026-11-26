@@ -74,6 +74,66 @@
         <p data-i18n="benchmarkPlaceholder">Coming soon: run 1000 scenarios, compare solvers, and view results.</p>
       </div>
     </section>
+    <!-- Replay -->
+<section class="section container" id="replay">
+  <div class="card">
+    <h2 data-i18n="replayTitle">Side-by-Side Replay</h2>
+    <p data-i18n="replayDesc">
+      Compare the three solvers on the same scenario. Each panel shows the yard after the same number of steps.
+    </p>
+
+    <!-- Replay controls -->
+    <div class="replay-controls">
+      <button id="replayPlay" class="btn btn-primary" aria-label="Play">
+        ▶ <span data-i18n="play">Play</span>
+      </button>
+      <button id="replayStep" class="btn btn-secondary" aria-label="Step">
+        ⏭ <span data-i18n="step">Step</span>
+      </button>
+      <button id="replayReset" class="btn btn-secondary" aria-label="Reset">
+        ↻ <span data-i18n="reset">Reset</span>
+      </button>
+      <div class="replay-speed">
+        <label for="replaySpeed" data-i18n="speed">Speed:</label>
+        <input type="range" id="replaySpeed" min="1" max="4" value="1" step="1" aria-label="Playback speed">
+        <span id="replaySpeedLabel">1x</span>
+      </div>
+      <div class="replay-progress" id="replayProgress">
+        <span data-i18n="stepLabel">Step</span> <span id="replayStepCount">0</span> / <span id="replayTotal">0</span>
+      </div>
+    </div>
+
+    <!-- Three panels -->
+    <div class="replay-grid">
+      <div class="replay-panel" data-solver="naive">
+        <div class="replay-panel-header">
+          <span class="replay-panel-title" data-i18n="naiveLabel">Naive</span>
+          <span class="replay-panel-count"><span id="naiveCount">0</span> <span data-i18n="relocationsShort">rel.</span></span>
+        </div>
+        <div class="yard-container" id="naiveYard"></div>
+        <div class="replay-panel-status" id="naiveStatus" data-i18n="ready">Ready</div>
+      </div>
+
+      <div class="replay-panel" data-solver="heuristic">
+        <div class="replay-panel-header">
+          <span class="replay-panel-title" data-i18n="heuristicLabel">Heuristic</span>
+          <span class="replay-panel-count"><span id="heuristicCount">0</span> <span data-i18n="relocationsShort">rel.</span></span>
+        </div>
+        <div class="yard-container" id="heuristicYard"></div>
+        <div class="replay-panel-status" id="heuristicStatus" data-i18n="ready">Ready</div>
+      </div>
+
+      <div class="replay-panel" data-solver="optimal">
+        <div class="replay-panel-header">
+          <span class="replay-panel-title" data-i18n="optimalLabel">Optimal</span>
+          <span class="replay-panel-count"><span id="optimalCount">0</span> <span data-i18n="relocationsShort">rel.</span></span>
+        </div>
+        <div class="yard-container" id="optimalYard"></div>
+        <div class="replay-panel-status" id="optimalStatus" data-i18n="ready">Ready</div>
+      </div>
+    </div>
+  </div>
+</section>
 
     <!-- Case Study -->
     <section class="section container" id="caseStudy">
