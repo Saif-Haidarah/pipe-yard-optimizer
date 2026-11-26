@@ -1196,6 +1196,8 @@ function initI18nAndTheme() {
   }
 
   initManualMode();
+    initReplay();
+      initBenchmarkUI();
 }
 
 if (document.readyState === "loading") {
@@ -1203,3 +1205,416 @@ if (document.readyState === "loading") {
 } else {
   initI18nAndTheme();
 }
+
+// ============================================================
+// SECTION 16: REPLAY ENGINE
+// ============================================================
+// Runs all 3 solvers on the same scenario, then replays them
+// side-by-side. Step-by-step, or auto-play with speed control.
+
+const replayState = {
+  scenario: null,
+  naive: null,
+  heuristic: null,
+  optimal: null,
+  stepIndex: 0,
+  totalSteps: 0,
+  isPlaying: false,
+  speed: 1,
+  intervalId: null
+};
+
+function initReplay() {
+  const scenario = createDefaultScenario(7);
+  replayState.scenario = scenario;
+
+  // Run the 3 solvers.
+  replayState.naive = solveNaive(scenario);
+  replayState.heuristic = solveHeuristic(scenario);
+  replayState.optimal = solveOptimal(scenario);
+
+  // Total steps = max moves across all solvers.
+  const naiveCount = replayState.naive.status === "solved" ? replayState.naive.moves.length : 0;
+  const heurCount = replayState.heuristic.status === "solved" ? replayState.heuristic.moves.length : 0;
+  const optCount = replayState.optimal.status === "solved" ? replayState.optimal.moves.length : 0;
+  replayState.totalSteps = Math.max(naiveCount, heurCount, optCount);
+  replayState.stepIndex = 0;
+  replayState.isPlaying = false;
+
+  // Wire buttons.
+  const playBtn = document.getElementById("replayPlay");
+  const stepBtn = document.getElementById("replayStep");
+  const resetBtn = document.getElementById("replayReset");
+  const speedInput = document.getElementById("replaySpeed");
+  const speedLabel = document.getElementById("replaySpeedLabel");
+
+  if (playBtn && !playBtn.dataset.bound) {
+    playBtn.dataset.bound = "1";
+    playBtn.addEventListener("click", toggleReplay);
+  }
+  if (stepBtn && !stepBtn.dataset.bound) {
+    stepBtn.dataset.bound = "1";
+    stepBtn.addEventListener("click", stepReplay);
+  }
+  if (resetBtn && !resetBtn.dataset.bound) {
+    resetBtn.dataset.bound = "1";
+    resetBtn.addEventListener("click", resetReplay);
+  }
+  if (speedInput && !speedInput.dataset.bound) {
+    speedInput.dataset.bound = "1";
+    speedInput.addEventListener("input", (e) => {
+      replayState.speed = parseInt(e.target.value, 10);
+      if (speedLabel) speedLabel.textContent = replayState.speed + "x";
+      if (replayState.isPlaying) {
+        startPlayLoop();
+      }
+    });
+  }
+
+  renderReplayStep(0);
+}
+
+function renderReplayStep(stepIndex) {
+  const scenario = replayState.scenario;
+  if (!scenario) return;
+
+  // Naive panel.
+  const naiveYard = document.getElementById("naiveYard");
+  const naiveCount = document.getElementById("naiveCount");
+  const naiveStatus = document.getElementById("naiveStatus");
+  if (naiveYard) {
+    const state = computeStateAtStep(scenario, replayState.naive, stepIndex);
+    renderYard(naiveYard, state, { H: scenario.H });
+    if (naiveCount) naiveCount.textContent = countRelocationsUpTo(replayState.naive, stepIndex);
+    if (naiveStatus) {
+      const done = stepIndex >= replayState.naive.moves.length;
+      naiveStatus.textContent = done ? "✅ Done" : "Running…";
+      naiveStatus.className = "replay-panel-status" + (done ? " won" : "");
+    }
+  }
+
+  // Heuristic panel.
+  const heurYard = document.getElementById("heuristicYard");
+  const heurCount = document.getElementById("heuristicCount");
+  const heurStatus = document.getElementById("heuristicStatus");
+  if (heurYard) {
+    const state = computeStateAtStep(scenario, replayState.heuristic, stepIndex);
+    renderYard(heurYard, state, { H: scenario.H });
+    if (heurCount) heurCount.textContent = countRelocationsUpTo(replayState.heuristic, stepIndex);
+    if (heurStatus) {
+      const done = stepIndex >= replayState.heuristic.moves.length;
+      heurStatus.textContent = done ? "✅ Done" : "Running…";
+      heurStatus.className = "replay-panel-status" + (done ? " won" : "");
+    }
+  }
+
+  // Optimal panel.
+  const optYard = document.getElementById("optimalYard");
+  const optCount = document.getElementById("optimalCount");
+  const optStatus = document.getElementById("optimalStatus");
+  if (optYard) {
+    if (replayState.optimal.status === "solved") {
+      const state = computeStateAtStep(scenario, replayState.optimal, stepIndex);
+      renderYard(optYard, state, { H: scenario.H });
+      if (optCount) optCount.textContent = countRelocationsUpTo(replayState.optimal, stepIndex);
+      if (optStatus) {
+        const done = stepIndex >= replayState.optimal.moves.length;
+        optStatus.textContent = done ? "✅ Done" : "Running…";
+        optStatus.className = "replay-panel-status" + (done ? " won" : "");
+      }
+    } else {
+      optYard.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: var(--space-6);">${replayState.optimal.status === "limit reached" ? "Too large for optimal solver" : "Infeasible"}</p>`;
+      if (optCount) optCount.textContent = "—";
+      if (optStatus) {
+        optStatus.textContent = "N/A";
+        optStatus.className = "replay-panel-status";
+      }
+    }
+  }
+
+  // Update progress.
+  const stepCount = document.getElementById("replayStepCount");
+  const totalEl = document.getElementById("replayTotal");
+  if (stepCount) stepCount.textContent = stepIndex;
+  if (totalEl) totalEl.textContent = replayState.totalSteps;
+}
+
+// Compute the state at step N (apply first N moves + auto-retrieve).
+function computeStateAtStep(scenario, solverResult, stepIndex) {
+  let state = autoRetrieve(initialState(scenario));
+  if (solverResult.status !== "solved") return state;
+
+  const limit = Math.min(stepIndex, solverResult.moves.length);
+  for (let i = 0; i < limit; i++) {
+    const m = solverResult.moves[i];
+    state = applyMove(state, m.from, m.to, scenario.rules);
+    state = autoRetrieve(state);
+  }
+  return state;
+}
+
+function countRelocationsUpTo(solverResult, stepIndex) {
+  if (solverResult.status !== "solved") return 0;
+  return Math.min(stepIndex, solverResult.moves.length);
+}
+
+function stepReplay() {
+  if (replayState.stepIndex >= replayState.totalSteps) {
+    return;
+  }
+  replayState.stepIndex++;
+  renderReplayStep(replayState.stepIndex);
+  if (replayState.stepIndex >= replayState.totalSteps) {
+    pauseReplay();
+  }
+}
+
+function toggleReplay() {
+  if (replayState.isPlaying) {
+    pauseReplay();
+  } else {
+    playReplay();
+  }
+}
+
+function playReplay() {
+  if (replayState.isPlaying) return;
+  if (replayState.stepIndex >= replayState.totalSteps) {
+    replayState.stepIndex = 0;
+  }
+  replayState.isPlaying = true;
+  const playBtn = document.getElementById("replayPlay");
+  if (playBtn) playBtn.innerHTML = "⏸ <span data-i18n=\"pause\">Pause</span>";
+  startPlayLoop();
+}
+
+function pauseReplay() {
+  replayState.isPlaying = false;
+  if (replayState.intervalId) {
+    clearInterval(replayState.intervalId);
+    replayState.intervalId = null;
+  }
+  const playBtn = document.getElementById("replayPlay");
+  if (playBtn) playBtn.innerHTML = "▶ <span data-i18n=\"play\">Play</span>";
+}
+
+function startPlayLoop() {
+  if (replayState.intervalId) {
+    clearInterval(replayState.intervalId);
+  }
+  const delayMs = 1000 / replayState.speed;
+  replayState.intervalId = setInterval(() => {
+    if (replayState.stepIndex >= replayState.totalSteps) {
+      pauseReplay();
+      return;
+    }
+    replayState.stepIndex++;
+    renderReplayStep(replayState.stepIndex);
+  }, delayMs);
+}
+
+function resetReplay() {
+  pauseReplay();
+  replayState.stepIndex = 0;
+  renderReplayStep(0);
+}
+
+console.log("✅ Replay engine loaded");
+
+// ============================================================
+// SECTION 17: BENCHMARK UI
+// ============================================================
+
+function initBenchmarkUI() {
+  const runMain = document.getElementById("runMainBenchmark");
+  const runSmall = document.getElementById("runSmallBenchmark");
+
+  if (runMain && !runMain.dataset.bound) {
+    runMain.dataset.bound = "1";
+    runMain.addEventListener("click", () => runMainBenchmarkUI());
+  }
+  if (runSmall && !runSmall.dataset.bound) {
+    runSmall.dataset.bound = "1";
+    runSmall.addEventListener("click", () => runSmallBenchmarkUI());
+  }
+
+  const minutesInput = document.getElementById("costMinutes");
+  const hourlyInput = document.getElementById("costHourly");
+  if (minutesInput && !minutesInput.dataset.bound) {
+    minutesInput.dataset.bound = "1";
+    minutesInput.addEventListener("input", updateCostResult);
+  }
+  if (hourlyInput && !hourlyInput.dataset.bound) {
+    hourlyInput.dataset.bound = "1";
+    hourlyInput.addEventListener("input", updateCostResult);
+  }
+}
+
+async function runMainBenchmarkUI() {
+  const progressEl = document.getElementById("benchmarkProgress");
+  const resultsEl = document.getElementById("benchmarkResults");
+  const fill = document.getElementById("progressFill");
+  const text = document.getElementById("progressText");
+  const summary = document.getElementById("resultsSummary");
+  const chart = document.getElementById("resultsChart");
+
+  progressEl.style.display = "flex";
+  resultsEl.style.display = "none";
+  summary.innerHTML = "";
+  chart.innerHTML = "";
+
+  const result = await runBenchmarkMain({
+    count: 1000,
+    chunkSize: 50,
+    onProgress: (done, total) => {
+      const pct = (done / total) * 100;
+      fill.style.width = pct + "%";
+      text.textContent = `${done} / ${total}`;
+    }
+  });
+
+  progressEl.style.display = "none";
+  resultsEl.style.display = "block";
+
+  updateHeroMetric(result.reductionPct, result.solved);
+
+  summary.innerHTML = `
+    <div class="result-card">
+      <div class="result-label">Naive avg</div>
+      <div class="result-value">${result.naive.avg.toFixed(2)}</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Heuristic avg</div>
+      <div class="result-value">${result.heuristic.avg.toFixed(2)}</div>
+    </div>
+    <div class="result-card result-success">
+      <div class="result-label">Reduction</div>
+      <div class="result-value">${result.reductionPct.toFixed(1)}%</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Solved</div>
+      <div class="result-value">${result.solved}</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Rejected</div>
+      <div class="result-value">${result.rejected}</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Heuristic worse</div>
+      <div class="result-value">${result.heuristicWorse.length}</div>
+    </div>
+  `;
+
+  renderBarChart(chart, [
+    { label: "Naive", value: result.naive.avg, color: "#ef4444" },
+    { label: "Heuristic", value: result.heuristic.avg, color: "#f59e0b" }
+  ], { title: "Average Relocations (Main Benchmark)", width: 700, height: 320 });
+
+  document.getElementById("costSection").style.display = "block";
+  window._lastBenchmark = result;
+  updateCostResult();
+}
+
+async function runSmallBenchmarkUI() {
+  const progressEl = document.getElementById("benchmarkProgress");
+  const resultsEl = document.getElementById("benchmarkResults");
+  const fill = document.getElementById("progressFill");
+  const text = document.getElementById("progressText");
+  const summary = document.getElementById("resultsSummary");
+  const chart = document.getElementById("resultsChart");
+
+  progressEl.style.display = "flex";
+  resultsEl.style.display = "none";
+  summary.innerHTML = "";
+  chart.innerHTML = "";
+
+  const result = await runBenchmarkSmall({
+    count: 200,
+    chunkSize: 10,
+    onProgress: (done, total) => {
+      const pct = (done / total) * 100;
+      fill.style.width = pct + "%";
+      text.textContent = `${done} / ${total}`;
+    }
+  });
+
+  progressEl.style.display = "none";
+  resultsEl.style.display = "block";
+
+  summary.innerHTML = `
+    <div class="result-card">
+      <div class="result-label">Naive avg</div>
+      <div class="result-value">${result.naive.avg.toFixed(2)}</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Heuristic avg</div>
+      <div class="result-value">${result.heuristic.avg.toFixed(2)}</div>
+    </div>
+    <div class="result-card result-success">
+      <div class="result-label">Optimal avg</div>
+      <div class="result-value">${result.optimal.avg.toFixed(2)}</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Heuristic gap</div>
+      <div class="result-value">${result.gapToOptimalPct.toFixed(1)}%</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Limit reached</div>
+      <div class="result-value">${result.limitReachedCount}</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Paired count</div>
+      <div class="result-value">${result.pairedCount}</div>
+    </div>
+  `;
+
+  renderBarChart(chart, [
+    { label: "Naive", value: result.naive.avg, color: "#ef4444" },
+    { label: "Heuristic", value: result.heuristic.avg, color: "#f59e0b" },
+    { label: "Optimal", value: result.optimal.avg, color: "#22c55e" }
+  ], { title: "Average Relocations (Small Benchmark)", width: 700, height: 320 });
+
+  document.getElementById("costSection").style.display = "block";
+  window._lastBenchmark = result;
+  updateCostResult();
+}
+
+function updateHeroMetric(reductionPct, solvedCount) {
+  const metricEl = document.getElementById("heroMetric");
+  if (metricEl) metricEl.textContent = reductionPct.toFixed(1) + "%";
+  const subEl = document.querySelector(".metric-sub");
+  if (subEl) subEl.textContent = `reduction vs Naive (${solvedCount} scenarios)`;
+}
+
+function updateCostResult() {
+  const minutesInput = document.getElementById("costMinutes");
+  const hourlyInput = document.getElementById("costHourly");
+  const resultEl = document.getElementById("costResult");
+  if (!resultEl || !window._lastBenchmark) return;
+
+  const minutes = parseFloat(minutesInput.value) || 0;
+  const hourly = parseFloat(hourlyInput.value) || 0;
+  const result = window._lastBenchmark;
+
+  if (!result.naive || !result.heuristic) {
+    resultEl.innerHTML = "<em>Run a benchmark first.</em>";
+    return;
+  }
+
+  const naiveAvg = result.naive.avg;
+  const heurAvg = result.heuristic.avg;
+  const reductionPerScenario = naiveAvg - heurAvg;
+  const count = result.solved;
+
+  const naiveTotalTime = naiveAvg * count * minutes;
+  const heurTotalTime = heurAvg * count * minutes;
+  const savedTime = naiveTotalTime - heurTotalTime;
+  const savedCost = (savedTime / 60) * hourly;
+
+  resultEl.innerHTML = `
+    <div><strong>Per scenario:</strong> ${reductionPerScenario.toFixed(2)} relocations saved ≈ ${(reductionPerScenario * minutes).toFixed(1)} min ≈ $${((reductionPerScenario * minutes / 60) * hourly).toFixed(2)}</div>
+    <div><strong>Across ${count} scenarios:</strong> ${(naiveAvg * count - heurAvg * count).toFixed(0)} relocations saved ≈ ${savedTime.toFixed(0)} min ≈ <strong>$${savedCost.toFixed(0)}</strong></div>
+  `;
+}
+
+console.log("✅ Benchmark UI loaded");

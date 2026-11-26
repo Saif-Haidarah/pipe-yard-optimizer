@@ -67,13 +67,56 @@
       </div>
     </section>
 
-    <!-- Benchmark -->
-    <section class="section container" id="benchmark">
-      <div class="card">
-        <h2 data-i18n="benchmarkTitle">Benchmark</h2>
-        <p data-i18n="benchmarkPlaceholder">Coming soon: run 1000 scenarios, compare solvers, and view results.</p>
+   <!-- Benchmark -->
+<section class="section container" id="benchmark">
+  <div class="card">
+    <h2 data-i18n="benchmarkTitle">Benchmark</h2>
+    <p data-i18n="benchmarkDesc">
+      Run 1000 scenarios on Naive and Heuristic, and 200 small scenarios on all three. Results are computed live.
+    </p>
+
+    <!-- Run buttons -->
+    <div class="benchmark-controls">
+      <button id="runMainBenchmark" class="btn btn-primary">
+        <span data-i18n="runMain">Run Main (1000)</span>
+      </button>
+      <button id="runSmallBenchmark" class="btn btn-secondary">
+        <span data-i18n="runSmall">Run Small (200 + Optimal)</span>
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="benchmark-progress" id="benchmarkProgress" style="display: none;">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
       </div>
-    </section>
+      <span class="progress-text" id="progressText">0 / 0</span>
+    </div>
+
+    <!-- Results -->
+    <div class="benchmark-results" id="benchmarkResults" style="display: none;">
+      <h3 data-i18n="resultsTitle">Results</h3>
+      <div id="resultsSummary" class="results-summary"></div>
+      <div id="resultsChart" class="results-chart"></div>
+    </div>
+
+    <!-- Cost estimate -->
+    <div class="cost-section" id="costSection" style="display: none;">
+      <h3 data-i18n="costTitle">Cost Estimate</h3>
+      <div class="cost-inputs">
+        <label>
+          <span data-i18n="costMinutes">Minutes per relocation:</span>
+          <input type="number" id="costMinutes" value="4" min="0" step="0.5">
+        </label>
+        <label>
+          <span data-i18n="costHourly">Crane hourly cost (USD):</span>
+          <input type="number" id="costHourly" value="450" min="0" step="10">
+        </label>
+      </div>
+      <div id="costResult" class="cost-result"></div>
+    </div>
+  </div>
+</section>
     <!-- Replay -->
 <section class="section container" id="replay">
   <div class="card">
