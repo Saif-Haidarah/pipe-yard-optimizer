@@ -132,59 +132,87 @@ console.log("reproducible:", JSON.stringify(pipes) === JSON.stringify(pipes2)); 
 // 6) full pipe dump (optional, for eyeballing)
 console.log("sample pipes:", JSON.stringify(pipes, null, 2));
 
-// ============================================================
-// SECTION 4: SCENARIO GENERATION (Part 2 — place on stacks)
-// ============================================================
-// Strategy: build the yard in REVERSE.
-// Start with empty stacks, then place pipes in DECREASING
-// pickupOrder (last-needed first, first-needed last).
-// This guarantees the scenario is solvable: when we play it
-// forward, the next-needed pipe is always reachable by undoing
-// the placements. Random stack choice keeps it interesting.
 
-function createScenario(seed, N, H, diameterRule) {
+// ============================================================
+// SECTION 4: SCENARIO GENERATION (v2 — with shuffle)
+// ============================================================
+// Strategy:
+//   1. Build in reverse (guarantees solvability).
+//   2. Shuffle some pipes between stacks (creates relocations).
+//   3. Verify with solveNaive. If infeasible, retry with next seed.
+//   4. Count rejected attempts (returned separately, not in averages).
+//
+// Tuned defaults (see benchmark notes in README):
+//   N = 8, H = 4, shuffleSteps = 20  →  avgReloc ≈ 2.29, zeroPct ≈ 11%
+
+const DEFAULT_N = 8;
+const DEFAULT_H = 4;
+const DEFAULT_DIAMETER_RULE = false;
+const DEFAULT_SHUFFLE_STEPS = 20;
+const DEFAULT_MAX_ATTEMPTS = 50;
+
+// Main benchmark entry point — uses tuned defaults.
+function createDefaultScenario(seed) {
+  return createScenario(seed, DEFAULT_N, DEFAULT_H, DEFAULT_DIAMETER_RULE, {
+    shuffleSteps: DEFAULT_SHUFFLE_STEPS
+  });
+}
+
+// General entry point — allows overriding N, H, diameterRule, shuffleSteps.
+// Returns null if all attempts failed (caller counts it as "rejected").
+function createScenario(seed, N, H, diameterRule, options) {
+  const opts = options || {};
+  const maxAttempts = opts.maxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const shuffleSteps = opts.shuffleSteps || DEFAULT_SHUFFLE_STEPS;
+
   const rules = defaultRules({ H: H, diameterRule: diameterRule });
 
-  // Total pipes = N stacks × (avg ~H/2 fill). We want a "full-ish"
-  // yard so the problem is non-trivial, but not always completely full.
-  // We use a second rng derived from the seed to decide fill amount.
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const attemptSeed = seed + attempt;
+    const scenario = buildScenario(attemptSeed, N, H, rules, shuffleSteps);
+    if (!scenario) continue;
+
+    // Verify solvability with the fastest solver (Naive).
+    const test = solveNaive(scenario);
+    if (test.status === "solved") {
+      scenario.attempts = attempt + 1;  // how many tries it took
+      return scenario;
+    }
+  }
+
+  // All attempts failed (very unlikely for reasonable parameters).
+  return null;
+}
+
+// Build one candidate: reverse-build, then shuffle.
+function buildScenario(seed, N, H, rules, shuffleSteps) {
   const rng = makeRng(seed);
 
-  // Decide how many pipes total: between 60% and 100% of N*H.
   const minPipes = Math.ceil(N * H * 0.6);
   const maxPipes = N * H;
   const totalPipes = randomInt(rng, minPipes, maxPipes);
 
-  // Generate pipes (Section 3).
   const pipes = generatePipes(seed, totalPipes);
-
-  // Sort pipes by pickupOrder DESCENDING (last-needed first).
-  // This is the "reverse build" order.
   const buildOrder = pipes.slice().sort((a, b) => b.pickupOrder - a.pickupOrder);
 
-  // Start with empty stacks.
   const stacks = Array.from({ length: N }, () => []);
 
-  // Place each pipe on a random legal stack.
+  // Phase 1: reverse build (guarantees solvability).
   for (const pipe of buildOrder) {
-    // Find all stacks that can legally accept this pipe.
     const legalIdx = [];
     for (let i = 0; i < N; i++) {
       if (canPlace(stacks[i], pipe, rules)) legalIdx.push(i);
     }
-
-    if (legalIdx.length === 0) {
-      // Should not happen with our fill amount, but guard anyway.
-      // Return null — caller treats as "rejected scenario".
-      return null;
-    }
-
-    // Pick a random legal stack.
+    if (legalIdx.length === 0) return null;
     const chosen = legalIdx[randomInt(rng, 0, legalIdx.length - 1)];
     stacks[chosen].push(pipe);
   }
 
-  // Return a clean scenario object.
+  // Phase 2: shuffle — swap random pipes between random stacks.
+  for (let step = 0; step < shuffleSteps; step++) {
+    shuffleOnce(stacks, rules, rng);
+  }
+
   return {
     seed: seed,
     N: N,
@@ -195,42 +223,41 @@ function createScenario(seed, N, H, diameterRule) {
   };
 }
 
-console.log("✅ Scenario generator (part 2) loaded");
-// ===== createScenario smoke test =====
+// One shuffle step: pick two stacks and try to swap their tops.
+// Only swaps if BOTH new placements are legal (H + canPlace).
+function shuffleOnce(stacks, rules, rng) {
+  if (stacks.length < 2) return;
 
-// 1) Basic shape
-const sc = createScenario(42, 6, 4, false);
-console.log("scenario keys:", Object.keys(sc));
-console.log("stacks count:", sc.stacks.length);          // 6
-console.log("totalPipes:", sc.totalPipes);               // between 15 and 24
-console.log("stack heights:", sc.stacks.map(s => s.length)); // each ≤ 4
+  const i = randomInt(rng, 0, stacks.length - 1);
+  let j = randomInt(rng, 0, stacks.length - 1);
+  if (i === j) return;
 
-// 2) All stacks respect H
-const allHeightsOk = sc.stacks.every(s => s.length <= sc.H);
-console.log("all heights ≤ H:", allHeightsOk);           // true
+  const stackI = stacks[i];
+  const stackJ = stacks[j];
+  if (stackI.length === 0 || stackJ.length === 0) return;
 
-// 3) Every pipe appears exactly once
-const totalInStacks = sc.stacks.reduce((sum, s) => sum + s.length, 0);
-console.log("pipes in stacks == totalPipes:", totalInStacks === sc.totalPipes); // true
+  const pipeI = stackI[stackI.length - 1];
+  const pipeJ = stackJ[stackJ.length - 1];
 
-// 4) Reproducibility
-const sc2 = createScenario(42, 6, 4, false);
-console.log("reproducible:", JSON.stringify(sc) === JSON.stringify(sc2)); // true
+  // Temporarily pop both.
+  stackI.pop();
+  stackJ.pop();
 
-// 5) Pretty print one stack to eyeball
-console.log("stack 0:", sc.stacks[0].map(p => p.pickupOrder));
-console.log("stack 1:", sc.stacks[1].map(p => p.pickupOrder));
+  // Try to place pipeI on stackJ and pipeJ on stackI.
+  const canIPlaceJ = canPlace(stackJ, pipeI, rules);
+  const canJPlaceI = canPlace(stackI, pipeJ, rules);
 
-// 6) Try with diameter rule ON
-const scStrict = createScenario(42, 6, 4, true);
-console.log("strict scenario created:", scStrict !== null);
-const strictOk = scStrict.stacks.every(s => {
-  for (let i = 1; i < s.length; i++) {
-    if (s[i].diameter !== s[i-1].diameter) return false;
+  if (canIPlaceJ && canJPlaceI) {
+    stackI.push(pipeJ);
+    stackJ.push(pipeI);
+  } else {
+    // Revert.
+    stackI.push(pipeI);
+    stackJ.push(pipeJ);
   }
-  return true;
-});
-console.log("strict diameter respected:", strictOk);    // true
+}
+
+console.log("✅ Scenario generator (v2 with shuffle) loaded");
 
 
 // ============================================================
