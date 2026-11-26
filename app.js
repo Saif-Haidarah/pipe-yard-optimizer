@@ -1034,3 +1034,63 @@ function replayAndVerify(scenario, moves) {
 }
 
 console.log("✅ Self-check loaded");
+
+// ============================================================
+// SECTION 12: SVG BAR CHART
+// ============================================================
+// Simple hand-written SVG bar chart.
+// Renders average relocations for Naive / Heuristic / Optimal.
+// No external libraries — pure SVG strings.
+
+function renderBarChart(container, data, options) {
+  const opts = options || {};
+  const width = opts.width || 600;
+  const height = opts.height || 300;
+  const padding = { top: 40, right: 20, bottom: 60, left: 60 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  // data = [{ label, value, color }, ...]
+  const maxValue = Math.max(1, ...data.map(d => d.value));
+  const barCount = data.length;
+  const barGap = 20;
+  const barWidth = (chartW - barGap * (barCount - 1)) / barCount;
+
+  // Y-axis ticks (0, 25%, 50%, 75%, 100% of max).
+  const ticks = 4;
+  let yAxis = "";
+  for (let i = 0; i <= ticks; i++) {
+    const y = padding.top + chartH - (chartH * i / ticks);
+    const value = (maxValue * i / ticks).toFixed(1);
+    yAxis += `<line x1="${padding.left}" y1="${y}" x2="${padding.left + chartW}" y2="${y}" stroke="#334155" stroke-width="1" />`;
+    yAxis += `<text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" fill="#94a3b8" font-size="11">${value}</text>`;
+  }
+
+  // Bars.
+  let bars = "";
+  data.forEach((d, i) => {
+    const barH = (d.value / maxValue) * chartH;
+    const x = padding.left + i * (barWidth + barGap);
+    const y = padding.top + chartH - barH;
+    bars += `<rect x="${x}" y="${y}" width="${barWidth}" height="${barH}" fill="${d.color}" rx="4" />`;
+    bars += `<text x="${x + barWidth / 2}" y="${y - 8}" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600">${d.value.toFixed(2)}</text>`;
+    bars += `<text x="${x + barWidth / 2}" y="${padding.top + chartH + 20}" text-anchor="middle" fill="#cbd5e1" font-size="12">${d.label}</text>`;
+  });
+
+  // Title.
+  const title = opts.title || "Average Relocations";
+  const svg = `
+    <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${title}">
+      <text x="${width / 2}" y="24" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600">${title}</text>
+      ${yAxis}
+      ${bars}
+    </svg>
+  `;
+
+  if (container) {
+    container.innerHTML = svg;
+  }
+  return svg;
+}
+
+console.log("✅ SVG bar chart loaded");
