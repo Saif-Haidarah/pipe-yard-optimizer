@@ -1448,8 +1448,59 @@ function initBenchmarkUI() {
     hourlyInput.dataset.bound = "1";
     hourlyInput.addEventListener("input", updateCostResult);
   }
+    const exportBtn = document.getElementById("btnExportCSV");
+  const printBtn = document.getElementById("btnPrint");
+  if (exportBtn && !exportBtn.dataset.bound) {
+    exportBtn.dataset.bound = "1";
+    exportBtn.addEventListener("click", exportBenchmarkCSV);
+  }
+  if (printBtn && !printBtn.dataset.bound) {
+    printBtn.dataset.bound = "1";
+    printBtn.addEventListener("click", () => window.print());
+  }
 }
+function exportBenchmarkCSV() {
+  if (!window._lastBenchmark) {
+    alert("Run a benchmark first.");
+    return;
+  }
 
+  const result = window._lastBenchmark;
+  const minutes = parseFloat(document.getElementById("costMinutes").value) || 0;
+  const hourly = parseFloat(document.getElementById("costHourly").value) || 0;
+
+  const rows = [
+    ["metric", "value"],
+    ["total_scenarios", result.total],
+    ["solved", result.solved],
+    ["rejected", result.rejected],
+    ["naive_avg_relocations", result.naive.avg.toFixed(4)],
+    ["heuristic_avg_relocations", result.heuristic.avg.toFixed(4)],
+    ["reduction_pct", (result.reductionPct !== undefined ? result.reductionPct : 0).toFixed(2)],
+    ["cost_minutes_per_relocation", minutes],
+    ["cost_hourly_usd", hourly]
+  ];
+
+  if (result.optimal) {
+    rows.push(["optimal_avg_relocations", result.optimal.avg.toFixed(4)]);
+    rows.push(["gap_to_optimal_pct", (result.gapToOptimalPct || 0).toFixed(2)]);
+    rows.push(["limit_reached_count", result.limitReachedCount || 0]);
+  }
+
+  const naiveAvg = result.naive.avg;
+  const heurAvg = result.heuristic.avg;
+  const savedCost = ((naiveAvg - heurAvg) * result.solved * minutes / 60) * hourly;
+  rows.push(["estimated_savings_usd", savedCost.toFixed(2)]);
+
+  const csv = rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "benchmark_results.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 async function runMainBenchmarkUI() {
   const progressEl = document.getElementById("benchmarkProgress");
   const resultsEl = document.getElementById("benchmarkResults");
