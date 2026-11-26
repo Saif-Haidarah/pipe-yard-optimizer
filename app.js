@@ -559,53 +559,40 @@ function solveOptimal(scenario, options) {
   const startTime = Date.now();
 
   const start = initialState(scenario);
-
-  // Check solved immediately (after initial auto-retrieve).
   const startRetrieved = autoRetrieve(start);
   if (isSolved(startRetrieved)) {
     return { status: "solved", moves: [], relocations: 0 };
   }
 
-  // Queue entries: { state, moves } where moves = list of actual moves only.
-  const queue = [{ state: start, moves: [] }];
+  let currentLevel = [{ state: start, moves: [] }];
   const visited = new Set();
   visited.add(canonicalKey(start));
 
   let explored = 0;
 
-  while (queue.length > 0) {
-    explored++;
-    if (explored > maxStates) {
-      return { status: "limit reached", moves: [], relocations: 0 };
-    }
-    if (Date.now() - startTime > timeCapMs) {
-      return { status: "limit reached", moves: [], relocations: 0 };
-    }
+  while (currentLevel.length > 0) {
+    const nextLevel = [];
 
-    const { state, moves } = queue.shift();
+    for (const { state, moves } of currentLevel) {
+      explored++;
+      if (explored > maxStates) return { status: "limit reached", moves: [], relocations: 0 };
+      if (Date.now() - startTime > timeCapMs) return { status: "limit reached", moves: [], relocations: 0 };
 
-    // Generate successors. Retrieval is applied INSIDE generateSuccessors.
-    const successors = generateSuccessors(state, rules);
+      const successors = generateSuccessors(state, rules);
+      for (const { nextState, move } of successors) {
+        const key = canonicalKey(nextState);
+        if (visited.has(key)) continue;
+        visited.add(key);
 
-    for (const { nextState, move } of successors) {
-      // If retrieval-only transition: move is null → don't count it.
-      const nextMoves = move ? moves.concat([move]) : moves;
-
-      // Check solved AFTER the transition.
-      if (isSolved(nextState)) {
-        return {
-          status: "solved",
-          moves: nextMoves,
-          relocations: nextMoves.length
-        };
+        const nextMoves = move ? moves.concat([move]) : moves;
+        if (isSolved(nextState)) {
+          return { status: "solved", moves: nextMoves, relocations: nextMoves.length };
+        }
+        nextLevel.push({ state: nextState, moves: nextMoves });
       }
-
-      const key = canonicalKey(nextState);
-      if (visited.has(key)) continue;
-      visited.add(key);
-
-      queue.push({ state: nextState, moves: nextMoves });
     }
+
+    currentLevel = nextLevel;
   }
 
   return { status: "infeasible", moves: [], relocations: 0 };
@@ -617,12 +604,14 @@ function solveOptimal(scenario, options) {
 function generateSuccessors(state, rules) {
   const afterRetrieve = autoRetrieve(state);
 
-  // Retrieval happened → mandatory transition, not a relocation.
+  // If retrieval happened, process the resulting state recursively.
+  // We do NOT count retrieval as a move, but we DO need to reach the
+  // post-retrieval state before enumerating moves.
   if (afterRetrieve.nextNeeded !== state.nextNeeded) {
-    return [{ nextState: afterRetrieve, move: null }];
+    return generateSuccessors(afterRetrieve, rules);
   }
 
-  // No retrieval → enumerate all legal moves.
+  // No retrieval — enumerate legal moves, each followed by autoRetrieve.
   const successors = [];
   for (let from = 0; from < state.stacks.length; from++) {
     if (state.stacks[from].length === 0) continue;
@@ -632,11 +621,14 @@ function generateSuccessors(state, rules) {
       if (to === from) continue;
       if (!canPlace(state.stacks[to], blocker, rules)) continue;
 
-      const nextState = applyMove(state, from, to, rules);
-      if (!nextState) continue;
+      const movedState = applyMove(state, from, to, rules);
+      if (!movedState) continue;
+
+      // IMPORTANT: auto-retrieve immediately after the move.
+      const finalState = autoRetrieve(movedState);
 
       successors.push({
-        nextState,
+        nextState: finalState,
         move: { from, to, pipeId: blocker.id }
       });
     }
@@ -784,3 +776,118 @@ function computeReduction(naiveArr, heurArr) {
 }
 
 console.log("✅ Benchmark (main) loaded");
+
+
+// ============================================================
+// SECTION 10: BENCHMARK (Small — 200 scenarios + Optimal)
+// ============================================================
+// Small scenarios (N=4, H=3) are within the optimal solver's
+// limits. We run all three solvers and measure the heuristic's
+// gap to optimal.
+//
+// Gap is computed on PAIRED results (same scenario, both solved).
+// Scenarios where optimal hit "limit reached" are excluded from
+// the gap but counted separately.
+
+function runBenchmarkSmall(options) {
+  const opts = options || {};
+  const count = opts.count || 200;
+  const chunkSize = opts.chunkSize || 10;
+  const onProgress = opts.onProgress || function () {};
+
+  const SMALL_N = 4;
+  const SMALL_H = 3;
+  const SMALL_SHUFFLE = 10;
+
+  return new Promise((resolve) => {
+    const naiveResults = [];
+    const heuristicResults = [];
+    const optimalResults = [];
+    const heuristicWorseThanNaive = [];
+    const pairedHeurOpt = [];  // [{ heur, opt }] — only when both solved
+    let optimalLimitReached = 0;
+    let optimalWorseThanHeuristic = 0;
+    let rejected = 0;
+    let i = 0;
+
+    function processChunk() {
+      const chunkEnd = Math.min(i + chunkSize, count);
+
+      for (; i < chunkEnd; i++) {
+        const seed = i;
+        const scenario = createScenario(seed, SMALL_N, SMALL_H, false, {
+          shuffleSteps: SMALL_SHUFFLE
+        });
+
+        if (!scenario) { rejected++; continue; }
+
+        const naive = solveNaive(scenario);
+        const heur = solveHeuristic(scenario);
+
+        if (naive.status !== "solved" || heur.status !== "solved") {
+          rejected++;
+          continue;
+        }
+
+        naiveResults.push(naive.relocations);
+        heuristicResults.push(heur.relocations);
+
+        if (heur.relocations > naive.relocations) {
+          heuristicWorseThanNaive.push({
+            seed: seed,
+            naive: naive.relocations,
+            heuristic: heur.relocations
+          });
+        }
+
+        // Optimal.
+        const opt = solveOptimal(scenario);
+        if (opt.status === "solved") {
+          optimalResults.push(opt.relocations);
+          pairedHeurOpt.push({ heur: heur.relocations, opt: opt.relocations });
+          if (opt.relocations > heur.relocations) {
+            optimalWorseThanHeuristic++;
+          }
+        } else if (opt.status === "limit reached") {
+          optimalLimitReached++;
+        } else {
+          rejected++;
+        }
+      }
+
+      onProgress(i, count);
+
+      if (i < count) {
+        setTimeout(processChunk, 0);
+      } else {
+        // Compute gap on paired results.
+        let gapSum = 0;
+        let gapCount = 0;
+        for (const pair of pairedHeurOpt) {
+          if (pair.opt === 0) continue;  // avoid division by zero
+          gapSum += (pair.heur - pair.opt) / pair.opt;
+          gapCount++;
+        }
+        const gapPct = gapCount > 0 ? (gapSum / gapCount) * 100 : 0;
+
+        resolve({
+          total: count,
+          solved: naiveResults.length,
+          rejected: rejected,
+          naive: summarize(naiveResults),
+          heuristic: summarize(heuristicResults),
+          optimal: summarize(optimalResults),
+          gapToOptimalPct: gapPct,
+          limitReachedCount: optimalLimitReached,
+          pairedCount: pairedHeurOpt.length,
+          heuristicWorseThanNaive: heuristicWorseThanNaive,
+          optimalWorseThanHeuristic: optimalWorseThanHeuristic
+        });
+      }
+    }
+
+    processChunk();
+  });
+}
+
+console.log("✅ Benchmark (small) loaded");
