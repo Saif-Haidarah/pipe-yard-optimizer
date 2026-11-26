@@ -314,3 +314,104 @@ function isSolved(state) {
 }
 
 console.log("✅ Move & retrieve module loaded");
+
+// ============================================================
+// SECTION 6: NAIVE SOLVER
+// ============================================================
+// Strategy: when the next-needed pipe is blocked, move each
+// blocker to the NEAREST stack (by index distance) that accepts it.
+// This is deliberately dumb — it gives us a baseline to beat.
+//
+// Returns: { status, moves, relocations }
+//   status: "solved" | "infeasible" | "limit reached"
+//   moves: array of { from, to, pipeId }
+//   relocations: number of moves (retrievals are NOT counted)
+
+function solveNaive(scenario) {
+  const rules = scenario.rules;
+  let state = initialState(scenario);
+  const moves = [];
+  let safety = 0;
+  const SAFETY_LIMIT = 10000; // prevent infinite loops
+
+  while (!isSolved(state)) {
+    safety++;
+    if (safety > SAFETY_LIMIT) {
+      return { status: "limit reached", moves, relocations: moves.length };
+    }
+
+    // 1) Auto-retrieve whatever is available.
+    const afterRetrieve = autoRetrieve(state);
+
+    // If nothing changed, the next-needed pipe is blocked.
+    if (afterRetrieve.nextNeeded === state.nextNeeded) {
+      // 2) Find the next-needed pipe and the stack it's in.
+      const target = findNextNeeded(state);
+      if (!target) {
+        // Should not happen if scenario is feasible.
+        return { status: "infeasible", moves, relocations: moves.length };
+      }
+
+      const { stackIdx } = target;
+
+      // 3) Find a legal target stack for the top blocker.
+      const blockerStack = state.stacks[stackIdx];
+      const blocker = blockerStack[blockerStack.length - 1];
+
+      const destIdx = findNearestLegalStack(state, stackIdx, blocker, rules);
+      if (destIdx === -1) {
+        return { status: "infeasible", moves, relocations: moves.length };
+      }
+
+      // 4) Apply the move.
+      const newState = applyMove(state, stackIdx, destIdx, rules);
+      if (!newState) {
+        return { status: "infeasible", moves, relocations: moves.length };
+      }
+
+      moves.push({ from: stackIdx, to: destIdx, pipeId: blocker.id });
+      state = newState;
+    } else {
+      // Retrieval happened — state advanced.
+      state = afterRetrieve;
+    }
+  }
+
+  return { status: "solved", moves, relocations: moves.length };
+}
+
+// Find which stack has the next-needed pipe on top (or anywhere).
+// Returns { stackIdx, depth } where depth = how many pipes are above it.
+function findNextNeeded(state) {
+  for (let i = 0; i < state.stacks.length; i++) {
+    const stack = state.stacks[i];
+    for (let j = stack.length - 1; j >= 0; j--) {
+      if (stack[j].pickupOrder === state.nextNeeded) {
+        return { stackIdx: i, depth: stack.length - 1 - j };
+      }
+    }
+  }
+  return null;
+}
+
+// Find the nearest stack (by |i - fromIdx|) that can accept `pipe`.
+// Ties broken by lowest index. Returns -1 if none.
+function findNearestLegalStack(state, fromIdx, pipe, rules) {
+  let best = -1;
+  let bestDist = Infinity;
+
+  for (let i = 0; i < state.stacks.length; i++) {
+    if (i === fromIdx) continue;
+    if (!canPlace(state.stacks[i], pipe, rules)) continue;
+
+    const dist = Math.abs(i - fromIdx);
+    if (dist < bestDist || (dist === bestDist && i < best)) {
+      best = i;
+      bestDist = dist;
+    }
+  }
+
+  return best;
+}
+
+console.log("✅ Naive solver loaded");
