@@ -232,3 +232,85 @@ const strictOk = scStrict.stacks.every(s => {
 });
 console.log("strict diameter respected:", strictOk);    // true
 
+
+// ============================================================
+// SECTION 5: MOVE & RETRIEVE
+// ============================================================
+// These are the ONLY two operations that change the yard state.
+// Every solver and manual mode MUST use these — never mutate
+// stacks directly.
+
+// Deep-copy a state so we never mutate the original.
+// (BFS relies on this: each branch must be independent.)
+function cloneState(state) {
+  return {
+    stacks: state.stacks.map(s => s.slice()),
+    nextNeeded: state.nextNeeded
+  };
+}
+
+// Move the top pipe from `fromIdx` to `toIdx`.
+// Returns a NEW state, or null if the move is illegal.
+function applyMove(state, fromIdx, toIdx, rules) {
+  // Validate indexes.
+  if (fromIdx === toIdx) return null;
+  if (fromIdx < 0 || fromIdx >= state.stacks.length) return null;
+  if (toIdx < 0 || toIdx >= state.stacks.length) return null;
+
+  const fromStack = state.stacks[fromIdx];
+  const toStack = state.stacks[toIdx];
+
+  // Source must have a pipe.
+  if (fromStack.length === 0) return null;
+
+  const pipe = fromStack[fromStack.length - 1];
+
+  // Destination must accept the pipe.
+  if (!canPlace(toStack, pipe, rules)) return null;
+
+  // Build the new state (clone first — never mutate input).
+  const next = cloneState(state);
+  next.stacks[fromIdx].pop();       // remove from source
+  next.stacks[toIdx].push(pipe);    // add to destination
+
+  return next;
+}
+
+// Auto-retrieve: after any move, if the next-needed pipe is on top
+// of any stack, remove it and advance nextNeeded. Repeat until
+// nothing can be retrieved. Returns a NEW state.
+function autoRetrieve(state) {
+  const next = cloneState(state);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < next.stacks.length; i++) {
+      const stack = next.stacks[i];
+      if (stack.length === 0) continue;
+      const top = stack[stack.length - 1];
+      if (top.pickupOrder === next.nextNeeded) {
+        stack.pop();
+        next.nextNeeded += 1;
+        changed = true;
+      }
+    }
+  }
+
+  return next;
+}
+
+// Build an initial state from a scenario.
+function initialState(scenario) {
+  return {
+    stacks: scenario.stacks.map(s => s.slice()), // deep copy
+    nextNeeded: 1
+  };
+}
+
+// Check if all pipes have been retrieved.
+function isSolved(state) {
+  return state.stacks.every(s => s.length === 0);
+}
+
+console.log("✅ Move & retrieve module loaded");
