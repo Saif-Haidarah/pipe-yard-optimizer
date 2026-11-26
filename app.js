@@ -131,3 +131,103 @@ console.log("reproducible:", JSON.stringify(pipes) === JSON.stringify(pipes2)); 
 
 // 6) full pipe dump (optional, for eyeballing)
 console.log("sample pipes:", JSON.stringify(pipes, null, 2));
+
+// ============================================================
+// SECTION 4: SCENARIO GENERATION (Part 2 — place on stacks)
+// ============================================================
+// Strategy: build the yard in REVERSE.
+// Start with empty stacks, then place pipes in DECREASING
+// pickupOrder (last-needed first, first-needed last).
+// This guarantees the scenario is solvable: when we play it
+// forward, the next-needed pipe is always reachable by undoing
+// the placements. Random stack choice keeps it interesting.
+
+function createScenario(seed, N, H, diameterRule) {
+  const rules = defaultRules({ H: H, diameterRule: diameterRule });
+
+  // Total pipes = N stacks × (avg ~H/2 fill). We want a "full-ish"
+  // yard so the problem is non-trivial, but not always completely full.
+  // We use a second rng derived from the seed to decide fill amount.
+  const rng = makeRng(seed);
+
+  // Decide how many pipes total: between 60% and 100% of N*H.
+  const minPipes = Math.ceil(N * H * 0.6);
+  const maxPipes = N * H;
+  const totalPipes = randomInt(rng, minPipes, maxPipes);
+
+  // Generate pipes (Section 3).
+  const pipes = generatePipes(seed, totalPipes);
+
+  // Sort pipes by pickupOrder DESCENDING (last-needed first).
+  // This is the "reverse build" order.
+  const buildOrder = pipes.slice().sort((a, b) => b.pickupOrder - a.pickupOrder);
+
+  // Start with empty stacks.
+  const stacks = Array.from({ length: N }, () => []);
+
+  // Place each pipe on a random legal stack.
+  for (const pipe of buildOrder) {
+    // Find all stacks that can legally accept this pipe.
+    const legalIdx = [];
+    for (let i = 0; i < N; i++) {
+      if (canPlace(stacks[i], pipe, rules)) legalIdx.push(i);
+    }
+
+    if (legalIdx.length === 0) {
+      // Should not happen with our fill amount, but guard anyway.
+      // Return null — caller treats as "rejected scenario".
+      return null;
+    }
+
+    // Pick a random legal stack.
+    const chosen = legalIdx[randomInt(rng, 0, legalIdx.length - 1)];
+    stacks[chosen].push(pipe);
+  }
+
+  // Return a clean scenario object.
+  return {
+    seed: seed,
+    N: N,
+    H: H,
+    rules: rules,
+    stacks: stacks,
+    totalPipes: totalPipes
+  };
+}
+
+console.log("✅ Scenario generator (part 2) loaded");
+// ===== createScenario smoke test =====
+
+// 1) Basic shape
+const sc = createScenario(42, 6, 4, false);
+console.log("scenario keys:", Object.keys(sc));
+console.log("stacks count:", sc.stacks.length);          // 6
+console.log("totalPipes:", sc.totalPipes);               // between 15 and 24
+console.log("stack heights:", sc.stacks.map(s => s.length)); // each ≤ 4
+
+// 2) All stacks respect H
+const allHeightsOk = sc.stacks.every(s => s.length <= sc.H);
+console.log("all heights ≤ H:", allHeightsOk);           // true
+
+// 3) Every pipe appears exactly once
+const totalInStacks = sc.stacks.reduce((sum, s) => sum + s.length, 0);
+console.log("pipes in stacks == totalPipes:", totalInStacks === sc.totalPipes); // true
+
+// 4) Reproducibility
+const sc2 = createScenario(42, 6, 4, false);
+console.log("reproducible:", JSON.stringify(sc) === JSON.stringify(sc2)); // true
+
+// 5) Pretty print one stack to eyeball
+console.log("stack 0:", sc.stacks[0].map(p => p.pickupOrder));
+console.log("stack 1:", sc.stacks[1].map(p => p.pickupOrder));
+
+// 6) Try with diameter rule ON
+const scStrict = createScenario(42, 6, 4, true);
+console.log("strict scenario created:", scStrict !== null);
+const strictOk = scStrict.stacks.every(s => {
+  for (let i = 1; i < s.length; i++) {
+    if (s[i].diameter !== s[i-1].diameter) return false;
+  }
+  return true;
+});
+console.log("strict diameter respected:", strictOk);    // true
