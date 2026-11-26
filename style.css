@@ -11,7 +11,6 @@
 
 /* ---------- CSS Variables (Dark mode = default) ---------- */
 :root {
-  /* Colors — Dark */
   --bg: #0a0e1a;
   --surface: #111827;
   --surface-2: #1f2937;
@@ -24,7 +23,6 @@
   --warning: #f59e0b;
   --danger: #ef4444;
 
-  /* Typography */
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -35,7 +33,6 @@
   --text-3xl: 2rem;
   --text-4xl: 2.5rem;
 
-  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -45,17 +42,14 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* Radius */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
 
-  /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
 
-  /* Transitions */
   --transition: 150ms ease;
 }
 
@@ -249,7 +243,14 @@ button {
 .hero h1 {
   font-size: var(--text-4xl);
   margin-bottom: var(--space-4);
-  background: linear-gradient(135deg, var(--text) 0%, var(--text-muted) 100%);
+  background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .hero h1 {
+  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -367,6 +368,46 @@ button {
 
 [dir="rtl"] .header-controls {
   flex-direction: row-reverse;
+}
+
+/* ---------- Yard visualization ---------- */
+.yard-container {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow-x: auto;
+}
+
+.yard-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+/* ---------- Yard legend ---------- */
+.yard-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: center;
+  padding: var(--space-3) 0;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
 }
 
 /* ---------- Responsive ---------- */

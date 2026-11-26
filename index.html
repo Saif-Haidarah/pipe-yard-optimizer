@@ -39,14 +39,17 @@
       </div>
     </section>
 
-    <!-- Placeholder sections (to be filled in later sessions) -->
+    <!-- Interactive Demo -->
     <section class="section container" id="demo">
       <div class="card">
         <h2 data-i18n="demoTitle">Interactive Demo</h2>
-        <p data-i18n="demoPlaceholder">Coming soon: yard visualization, manual mode, and solver comparison.</p>
+        <p data-i18n="demoDesc">A generated scenario (seed 42). Pipes are colored by diameter; the gold-outlined pipe is the next needed.</p>
+        <div class="yard-container" id="yardContainer" style="margin-top: var(--space-4);"></div>
+        <div id="yardLegend" style="margin-top: var(--space-4);"></div>
       </div>
     </section>
 
+    <!-- Benchmark -->
     <section class="section container" id="benchmark">
       <div class="card">
         <h2 data-i18n="benchmarkTitle">Benchmark</h2>
@@ -54,6 +57,7 @@
       </div>
     </section>
 
+    <!-- Case Study -->
     <section class="section container" id="caseStudy">
       <div class="card">
         <h2 data-i18n="caseStudyTitle">Case Study</h2>
