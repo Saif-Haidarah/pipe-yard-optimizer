@@ -415,3 +415,225 @@ function findNearestLegalStack(state, fromIdx, pipe, rules) {
 }
 
 console.log("✅ Naive solver loaded");
+
+// ============================================================
+// SECTION 7: HEURISTIC SOLVER
+// ============================================================
+// Strategy: move each blocker to the stack whose TOP pipe has the
+// LARGEST pickupOrder (i.e. the stack it "blocks" the least).
+// Empty stacks are used only when no non-empty stack is legal.
+// Ties broken by lowest index.
+//
+// Same interface as solveNaive: { status, moves, relocations }.
+
+function solveHeuristic(scenario) {
+  const rules = scenario.rules;
+  let state = initialState(scenario);
+  const moves = [];
+  let safety = 0;
+  const SAFETY_LIMIT = 10000;
+
+  while (!isSolved(state)) {
+    safety++;
+    if (safety > SAFETY_LIMIT) {
+      return { status: "limit reached", moves, relocations: moves.length };
+    }
+
+    const afterRetrieve = autoRetrieve(state);
+
+    if (afterRetrieve.nextNeeded === state.nextNeeded) {
+      const target = findNextNeeded(state);
+      if (!target) {
+        return { status: "infeasible", moves, relocations: moves.length };
+      }
+
+      const { stackIdx } = target;
+      const blockerStack = state.stacks[stackIdx];
+      const blocker = blockerStack[blockerStack.length - 1];
+
+      const destIdx = findHeuristicStack(state, stackIdx, blocker, rules);
+      if (destIdx === -1) {
+        return { status: "infeasible", moves, relocations: moves.length };
+      }
+
+      const newState = applyMove(state, stackIdx, destIdx, rules);
+      if (!newState) {
+        return { status: "infeasible", moves, relocations: moves.length };
+      }
+
+      moves.push({ from: stackIdx, to: destIdx, pipeId: blocker.id });
+      state = newState;
+    } else {
+      state = afterRetrieve;
+    }
+  }
+
+  return { status: "solved", moves, relocations: moves.length };
+}
+
+// Find the best stack for `pipe` using the min-max heuristic:
+// prefer non-empty stacks whose top has the largest pickupOrder.
+// Empty stacks only if no non-empty is legal. Ties by lowest index.
+function findHeuristicStack(state, fromIdx, pipe, rules) {
+  let bestNonEmpty = -1;
+  let bestNonEmptyTopOrder = -Infinity;
+
+  let bestEmpty = -1;
+
+  for (let i = 0; i < state.stacks.length; i++) {
+    if (i === fromIdx) continue;
+    if (!canPlace(state.stacks[i], pipe, rules)) continue;
+
+    const stack = state.stacks[i];
+
+    if (stack.length === 0) {
+      // Candidate empty stack — remember the lowest index only.
+      if (bestEmpty === -1 || i < bestEmpty) bestEmpty = i;
+      continue;
+    }
+
+    const topOrder = stack[stack.length - 1].pickupOrder;
+
+    // Prefer larger topOrder. Ties → lowest index.
+    if (topOrder > bestNonEmptyTopOrder ||
+        (topOrder === bestNonEmptyTopOrder && (bestNonEmpty === -1 || i < bestNonEmpty))) {
+      bestNonEmpty = i;
+      bestNonEmptyTopOrder = topOrder;
+    }
+  }
+
+  // Prefer non-empty if any is legal; else fall back to empty.
+  if (bestNonEmpty !== -1) return bestNonEmpty;
+  return bestEmpty;
+}
+
+console.log("✅ Heuristic solver loaded");
+
+
+// ============================================================
+// SECTION 8: OPTIMAL SOLVER (BFS)
+// ============================================================
+// Explores all legal moves level by level (BFS) until it finds
+// a state where all pipes are retrieved. BFS guarantees the first
+// solved state is optimal (fewest relocations).
+//
+// IMPORTANT: retrieval is NOT a relocation. Only actual moves
+// (from != to) are counted.
+//
+// HARD LIMITS: max 200,000 states, max 3 seconds.
+// If hit: return { status: "limit reached" } — never guess.
+
+function solveOptimal(scenario, options) {
+  const opts = options || {};
+  const maxStates = opts.maxStates || 200000;
+  const timeCapMs = opts.timeCapMs || 3000;
+
+  const rules = scenario.rules;
+  const startTime = Date.now();
+
+  const start = initialState(scenario);
+
+  // Check solved immediately (after initial auto-retrieve).
+  const startRetrieved = autoRetrieve(start);
+  if (isSolved(startRetrieved)) {
+    return { status: "solved", moves: [], relocations: 0 };
+  }
+
+  // Queue entries: { state, moves } where moves = list of actual moves only.
+  const queue = [{ state: start, moves: [] }];
+  const visited = new Set();
+  visited.add(canonicalKey(start));
+
+  let explored = 0;
+
+  while (queue.length > 0) {
+    explored++;
+    if (explored > maxStates) {
+      return { status: "limit reached", moves: [], relocations: 0 };
+    }
+    if (Date.now() - startTime > timeCapMs) {
+      return { status: "limit reached", moves: [], relocations: 0 };
+    }
+
+    const { state, moves } = queue.shift();
+
+    // Generate successors. Retrieval is applied INSIDE generateSuccessors.
+    const successors = generateSuccessors(state, rules);
+
+    for (const { nextState, move } of successors) {
+      // If retrieval-only transition: move is null → don't count it.
+      const nextMoves = move ? moves.concat([move]) : moves;
+
+      // Check solved AFTER the transition.
+      if (isSolved(nextState)) {
+        return {
+          status: "solved",
+          moves: nextMoves,
+          relocations: nextMoves.length
+        };
+      }
+
+      const key = canonicalKey(nextState);
+      if (visited.has(key)) continue;
+      visited.add(key);
+
+      queue.push({ state: nextState, moves: nextMoves });
+    }
+  }
+
+  return { status: "infeasible", moves: [], relocations: 0 };
+}
+
+// Generate successors. First apply autoRetrieve. If retrieval changed
+// the state, that's the ONLY successor (retrieval is mandatory).
+// Otherwise, enumerate all legal moves.
+function generateSuccessors(state, rules) {
+  const afterRetrieve = autoRetrieve(state);
+
+  // Retrieval happened → mandatory transition, not a relocation.
+  if (afterRetrieve.nextNeeded !== state.nextNeeded) {
+    return [{ nextState: afterRetrieve, move: null }];
+  }
+
+  // No retrieval → enumerate all legal moves.
+  const successors = [];
+  for (let from = 0; from < state.stacks.length; from++) {
+    if (state.stacks[from].length === 0) continue;
+    const blocker = state.stacks[from][state.stacks[from].length - 1];
+
+    for (let to = 0; to < state.stacks.length; to++) {
+      if (to === from) continue;
+      if (!canPlace(state.stacks[to], blocker, rules)) continue;
+
+      const nextState = applyMove(state, from, to, rules);
+      if (!nextState) continue;
+
+      successors.push({
+        nextState,
+        move: { from, to, pipeId: blocker.id }
+      });
+    }
+  }
+  return successors;
+}
+
+// Canonical key: sort the stacks (not the pipes inside them!),
+// then append nextNeeded. Two states with the same key are equivalent.
+function canonicalKey(state) {
+  const stackKeys = state.stacks.map(s =>
+    s.map(p => p.pickupOrder).join(',')  // NO .sort() inside
+  );
+  stackKeys.sort();  // sort the STACKS only
+  return stackKeys.join('|') + '#' + state.nextNeeded;
+}
+
+// Eligibility check for the optimal solver (per spec).
+function isOptimalEligible(scenario) {
+  const totalPipes = scenario.stacks.reduce((s, st) => s + st.length, 0);
+  if (totalPipes > 8) return false;
+  if (scenario.N > 4) return false;
+  if (scenario.H > 3) return false;
+  return true;
+}
+
+console.log("✅ Optimal solver loaded (fixed)");
